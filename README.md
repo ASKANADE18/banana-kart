@@ -102,7 +102,6 @@ Invalid request data:
 ```http
 422 Unprocessable Entity
 ```
-
 ### Automated Tests
 
 The Episode 1 test suite verifies:
@@ -112,27 +111,26 @@ The Episode 1 test suite verifies:
 - Invalid-request validation
 - Password fields are not exposed
 
-```markdown
 Episode 1 adds three automated tests covering these behaviors.
 
 ---
 
-# Running Locally
+### Running Locally
 
-## 1. Create the virtual environment
+### 1. Create the virtual environment
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-## 2. Install dependencies
+### 2. Install dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## 3. Create `.env`
+### 3. Create `.env`
 
 ```env
 POSTGRES_USER=bananakart_user
@@ -146,19 +144,19 @@ TEST_DATABASE_URL=postgresql+psycopg://bananakart_user:your_local_password@local
 
 Do not commit `.env`.
 
-## 4. Start PostgreSQL
+### 4. Start PostgreSQL
 
 ```bash
 docker compose up -d
 ```
 
-## 5. Apply migrations
+### 5. Apply migrations
 
 ```bash
 ./.venv/bin/alembic upgrade head
 ```
 
-## 6. Start the API
+### 6. Start the API
 
 ```bash
 ./.venv/bin/python -m uvicorn app.main:app --reload
@@ -172,7 +170,7 @@ http://127.0.0.1:8000/docs
 
 ---
 
-# Running Tests
+### Running Tests
 
 The tests use a separate PostgreSQL database named `bananakart_test`.
 

@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.routes.users import router as users_router
 from app.database import get_db
 
 # This object represents our FastAPI application.
@@ -10,6 +11,13 @@ app = FastAPI(
     title= "BananaKart API",
     description="The world's most chaotic banana marketplace"
     )
+
+# Register the users router with the main FastAPI application.
+#
+# The router itself has prefix="/users", so this activates endpoints such as:
+#
+# POST /users
+app.include_router(users_router)
 
 @app.get("/")
 def home():

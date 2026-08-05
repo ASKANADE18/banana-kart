@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
 
+    # Used only by automated tests.
+    # Tests must never create or delete data in the development database.
+    test_database_url: str
+
     # Tell Pydantic where to find our local environment variables.
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -8,6 +8,9 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 
+from typing import Annotated
+from app.api.dependencies.auth import get_current_user
+
 
 # A router groups endpoints that belong to the same resource.
 #
@@ -17,6 +20,25 @@ router = APIRouter(
     prefix="/users",
     tags=["Users"],
 )
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+)
+def read_current_user(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+) -> User:
+    """
+    Return the profile of the authenticated user.
+
+    The endpoint does not accept a user ID from the client.
+    The identity comes from the verified JWT.
+    """
+
+    return current_user
 
 
 @router.post(

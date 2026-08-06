@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes.users import router as users_router
+from app.api.routes import auth, users
 from app.database import get_db
 
 # This object represents our FastAPI application.
@@ -17,7 +17,8 @@ app = FastAPI(
 # The router itself has prefix="/users", so this activates endpoints such as:
 #
 # POST /users
-app.include_router(users_router)
+app.include_router(users.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def home():

@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     # Tests must never create or delete data in the development database.
     test_database_url: str
 
+    # Used to sign and verify JWT access tokens.
+    # This value must remain private.
+    jwt_secret_key: str
+
+    # HS256 uses the same secret for signing and verification.
+    jwt_algorithm: str = "HS256"
+
+    # Access tokens will stop working after this many minutes.
+    access_token_expire_minutes: int = 30
+
     # Tell Pydantic where to find our local environment variables.
     model_config = SettingsConfigDict(
         env_file=".env",

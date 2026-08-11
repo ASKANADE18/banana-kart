@@ -9,10 +9,16 @@ from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 
-# Import the model so SQLAlchemy knows about the users table
-# when Base.metadata.create_all() runs.
+# Import all SQLAlchemy models so they are registered with Base.metadata
+# before create_all() creates the test tables.
 from app.models.user import User  # noqa: F401
+from app.models.product import Product  # noqa: F401
+from app.models.order import Order  # noqa: F401
 
+
+# ---------------------------------------------------------
+# TEST DATABASE SETUP
+# ---------------------------------------------------------
 
 # This engine connects only to the test database.
 # It must never point to the normal BananaKart development database.
@@ -29,6 +35,10 @@ TestingSessionLocal = sessionmaker(
     expire_on_commit=False,
 )
 
+
+# ---------------------------------------------------------
+# API CLIENT FIXTURE
+# ---------------------------------------------------------
 
 @pytest.fixture()
 def client() -> Generator[TestClient, None, None]:
@@ -51,7 +61,7 @@ def client() -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         """
         Give API requests a test database session instead of
-        a normal BananaKart database session.
+        the normal BananaKart database session.
         """
 
         db = TestingSessionLocal()
@@ -61,15 +71,39 @@ def client() -> Generator[TestClient, None, None]:
         finally:
             db.close()
 
-    # Whenever an endpoint asks for get_db, FastAPI will use
-    # override_get_db during this test.
+    # Whenever an endpoint asks for get_db(),
+    # FastAPI will use the test database instead.
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as test_client:
         yield test_client
 
-    # Remove test-specific changes so they cannot affect other tests.
+    # Remove test-specific dependency overrides.
     app.dependency_overrides.clear()
 
-    # Clean up all test data after the test finishes.
+    # Remove all test data after the test.
     Base.metadata.drop_all(bind=test_engine)
+
+
+# ---------------------------------------------------------
+# DIRECT DATABASE FIXTURE
+# ---------------------------------------------------------
+
+@pytest.fixture()
+def db_session(
+    client: TestClient,
+) -> Generator[Session, None, None]:
+    """
+    Give test code direct access to the same test database.
+
+    Depending on `client` ensures:
+    - test tables have already been created
+    - FastAPI is also using the test database
+    """
+
+    db = TestingSessionLocal()
+
+    try:
+        yield db
+    finally:
+        db.close()

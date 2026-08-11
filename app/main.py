@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.routes import auth, users
+from app.api.routes import auth, orders, users
 from app.database import get_db
 
 # This object represents our FastAPI application.
@@ -19,6 +19,7 @@ app = FastAPI(
 # POST /users
 app.include_router(users.router)
 app.include_router(auth.router)
+app.include_router(orders.router)
 
 @app.get("/")
 def home():

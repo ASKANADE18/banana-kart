@@ -235,3 +235,79 @@ def test_only_one_user_can_buy_last_item(client, db_session):
 
     db_session.refresh(product)
     assert product.stock_quantity == 0
+
+def test_get_orders_returns_current_users_orders(
+    client,
+    db_session,
+):
+    product = create_product(db_session, stock_quantity=100)
+
+    token = register_and_login(client)
+
+    for i in range(3):
+        client.post(
+            "/orders",
+            json={
+                "product_id": product.id,
+                "quantity": 1,
+            },
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Idempotency-Key": f"order-{i}",
+            },
+        )
+
+    response = client.get(
+        "/orders?limit=20&offset=0",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 3
+
+def test_get_orders_pagination(
+    client,
+    db_session,
+):
+    product = create_product(db_session, stock_quantity=100)
+
+    token = register_and_login(client)
+
+    for i in range(5):
+        client.post(
+            "/orders",
+            json={
+                "product_id": product.id,
+                "quantity": 1,
+            },
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Idempotency-Key": f"page-order-{i}",
+            },
+        )
+
+    response = client.get(
+        "/orders?limit=2&offset=0",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+def test_get_orders_rejects_invalid_limit(
+    client,
+):
+    token = register_and_login(client)
+
+    response = client.get(
+        "/orders?limit=1000",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 422

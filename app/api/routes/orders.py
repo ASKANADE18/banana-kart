@@ -79,8 +79,9 @@ def create_order(
     # 2. FIND PRODUCT
     # ---------------------------------------------------------
     product = db.get(
-        Product,
-        order_data.product_id,
+        select(Product)
+        .where(Product.id == order_data.product_id)
+        .with_for_update()
     )
 
     if product is None:

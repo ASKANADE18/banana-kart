@@ -1,30 +1,102 @@
-# BananaKart Backend
+# BananaKart Backend Chronicles
 
-Backend Chronicles - A production-style backend project built episode by episode.
+## Episode 4: The Last Banana
 
-## Story
+There is only one banana left.
 
-Welcome to BananaKart, the world's most chaotic online marketplace.
+Bob and Alice both try to buy it at the same time.
 
-The goal of this project is to build a backend the same way a real startup evolves—from a simple CRUD application into a scalable production system.
+Without concurrency control, both requests could read:
 
-Each episode introduces a real engineering problem and implements a practical solution.
+```text
+stock = 1
+```
 
-## Tech Stack
+and both think the purchase is valid.
 
-- Python
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Alembic
-- Redis (coming soon)
-- RabbitMQ (coming soon)
-- Docker (coming soon)
+## Problem: Race Condition
 
-## Episodes
+```text
+Bob reads stock = 1
+Alice reads stock = 1
 
-- Episode 0 – Project Foundation
-- Episode 1 – The CEO Wants Users
-- Episode 2 – Everyone Is Anonymous
-- Episode 3 – Bob Bought 57 Bananas
-- More episodes coming...
+Bob buys ✅
+Alice buys ✅
+
+But only one banana existed.
+```
+
+## Solution: Row Locking
+
+The product is selected using:
+
+```sql
+SELECT *
+FROM products
+WHERE id = ?
+FOR UPDATE;
+```
+
+In SQLAlchemy:
+
+```python
+select(Product)
+.where(Product.id == product_id)
+.with_for_update()
+```
+
+PostgreSQL locks that product row until the transaction ends.
+
+```text
+Bob locks row
+   ↓
+Alice waits
+   ↓
+Bob updates stock and commits
+   ↓
+lock released
+   ↓
+Alice sees latest stock
+   ↓
+409 Not Enough Stock
+```
+
+## Transaction vs Lock
+
+```text
+Transaction
+→ all or nothing
+
+Row lock
+→ competing transactions wait their turn
+```
+
+## Tests
+
+The concurrency test sends two purchase requests at roughly the same time.
+
+Expected result:
+
+```text
+one request → 201 Created
+one request → 409 Conflict
+final stock → 0
+```
+
+Run:
+
+```bash
+./.venv/bin/python -m pytest -v
+```
+
+Expected:
+
+```text
+16 passed
+```
+
+## Next Episode
+
+Episode 5: Database Starts Crying
+
+Indexes, query performance, and pagination.

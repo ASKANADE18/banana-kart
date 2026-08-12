@@ -17,6 +17,7 @@ from app.models.order import Order
 from app.models.product import Product
 from app.models.user import User
 from app.schemas.order import OrderCreate, OrderResponse
+from fastapi import Query
 
 
 router = APIRouter(
@@ -78,7 +79,7 @@ def create_order(
     # ---------------------------------------------------------
     # 2. FIND PRODUCT
     # ---------------------------------------------------------
-    product = db.get(
+    product = db.scalar(
         select(Product)
         .where(Product.id == order_data.product_id)
         .with_for_update()
@@ -151,3 +152,23 @@ def create_order(
     db.refresh(new_order)
 
     return new_order
+
+@router.get(
+    "",
+    response_model=list[OrderResponse],
+)
+def get_orders(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    orders = db.scalars(
+        select(Order)
+        .where(Order.user_id == current_user.id)
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return orders

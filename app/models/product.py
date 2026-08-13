@@ -30,3 +30,8 @@ class Product(Base):
         nullable=False,
         default=0,
     )
+
+    image_key: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )

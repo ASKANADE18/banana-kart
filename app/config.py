@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # Access tokens will stop working after this many minutes.
     access_token_expire_minutes: int = 30
 
+    # AWS / S3 configuration
+    aws_profile: str
+    aws_region: str = "us-east-1"
+    s3_bucket_name: str
+
     # Tell Pydantic where to find our local environment variables.
     model_config = SettingsConfigDict(
         env_file=".env",

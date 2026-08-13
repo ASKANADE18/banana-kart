@@ -1,4 +1,8 @@
 from typing import Annotated
+import json
+
+from app.cache import redis_client, clear_user_order_cache
+from redis.exceptions import RedisError
 
 from fastapi import (
     APIRouter,
@@ -131,6 +135,7 @@ def create_order(
         #
         # This is our transaction.
         db.commit()
+        clear_user_order_cache(current_user.id)
 
     except IntegrityError:
         db.rollback()
@@ -163,6 +168,21 @@ def get_orders(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
+    cache_key = (
+        f"orders:user:{current_user.id}:"
+        f"limit:{limit}:offset:{offset}"
+    )
+
+    cached_orders = None
+
+    try:
+        cached_orders = redis_client.get(cache_key)
+    except RedisError:
+        pass
+
+    if cached_orders is not None:
+        return json.loads(cached_orders)
+    
     orders = db.scalars(
         select(Order)
         .where(Order.user_id == current_user.id)
@@ -171,4 +191,18 @@ def get_orders(
         .offset(offset)
     ).all()
 
-    return orders
+    orders_data = [
+        OrderResponse.model_validate(order).model_dump(mode="json")
+        for order in orders
+    ]
+
+    try:
+        redis_client.setex(
+            cache_key,
+            60,
+            json.dumps(orders_data),
+        )
+    except RedisError:
+        pass
+
+    return orders_data

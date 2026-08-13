@@ -1,6 +1,10 @@
 from app.models.product import Product
 from concurrent.futures import ThreadPoolExecutor
 
+from redis.exceptions import RedisError
+
+from app.cache import redis_client
+
 
 def create_product(db_session, stock_quantity=100):
     """
@@ -311,3 +315,135 @@ def test_get_orders_rejects_invalid_limit(
     )
 
     assert response.status_code == 422
+
+def test_get_orders_populates_cache(
+    client,
+    db_session,
+):
+    product = create_product(db_session, stock_quantity=100)
+    token = register_and_login(client)
+
+    client.post(
+        "/orders",
+        json={
+            "product_id": product.id,
+            "quantity": 1,
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": "cache-order-1",
+        },
+    )
+
+    redis_client.flushdb()
+
+    response = client.get(
+        "/orders?limit=20&offset=0",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 200
+
+    keys = list(
+        redis_client.scan_iter(
+            match="orders:user:*"
+        )
+    )
+
+    assert len(keys) == 1
+
+def test_create_order_invalidates_cache(
+    client,
+    db_session,
+):
+    product = create_product(db_session, stock_quantity=100)
+    token = register_and_login(client)
+
+    # Build cache
+    client.get(
+        "/orders?limit=20&offset=0",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    keys_before = list(
+        redis_client.scan_iter(
+            match="orders:user:*"
+        )
+    )
+
+    assert len(keys_before) > 0
+
+    # Create a new order
+    response = client.post(
+        "/orders",
+        json={
+            "product_id": product.id,
+            "quantity": 1,
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": "invalidate-order-1",
+        },
+    )
+
+    assert response.status_code == 201
+
+    keys_after = list(
+        redis_client.scan_iter(
+            match="orders:user:*"
+        )
+    )
+
+    assert len(keys_after) == 0
+
+def test_get_orders_works_when_redis_is_down(
+        client,
+        db_session,
+        monkeypatch,
+    ):
+    product = create_product(db_session, stock_quantity=100)
+    token = register_and_login(client)
+
+    client.post(
+        "/orders",
+        json={
+            "product_id": product.id,
+            "quantity": 1,
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": "redis-down-order",
+        },
+    )
+
+    def broken_get(*args, **kwargs):
+        raise RedisError("Redis unavailable")
+
+    def broken_setex(*args, **kwargs):
+        raise RedisError("Redis unavailable")
+
+    monkeypatch.setattr(
+        redis_client,
+        "get",
+        broken_get,
+    )
+
+    monkeypatch.setattr(
+        redis_client,
+        "setex",
+        broken_setex,
+    )
+
+    response = client.get(
+        "/orders?limit=20&offset=0",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1

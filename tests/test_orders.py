@@ -447,3 +447,40 @@ def test_get_orders_works_when_redis_is_down(
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+def test_order_schedules_confirmation_email(
+    client,
+    db_session,
+    monkeypatch,
+):
+    product = create_product(db_session, stock_quantity=10)
+
+    token = register_and_login(client)
+
+    called = {}
+
+    def fake_send_order_confirmation_email(email: str, order_id: int):
+        called["email"] = email
+        called["order_id"] = order_id
+
+    monkeypatch.setattr(
+        "app.api.routes.orders.send_order_confirmation_email",
+        fake_send_order_confirmation_email,
+    )
+
+    response = client.post(
+        "/orders",
+        json={
+            "product_id": product.id,
+            "quantity": 1,
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Idempotency-Key": "background-email-test",
+        },
+    )
+
+    assert response.status_code == 201
+
+    assert called["email"] == "bob@example.com"
+    assert called["order_id"] == response.json()["id"]

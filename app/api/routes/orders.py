@@ -1,5 +1,7 @@
 from typing import Annotated
 import json
+from app.email import send_order_confirmation_email
+from fastapi import BackgroundTasks
 
 from app.cache import redis_client, clear_user_order_cache
 from redis.exceptions import RedisError
@@ -37,7 +39,7 @@ router = APIRouter(
 )
 def create_order(
     order_data: OrderCreate,
-
+    background_tasks: BackgroundTasks,
     # Client generates this key.
     idempotency_key: Annotated[
         str,
@@ -155,6 +157,12 @@ def create_order(
         raise
 
     db.refresh(new_order)
+
+    background_tasks.add_task(
+        send_order_confirmation_email,
+        current_user.email,
+        new_order.id,
+    )
 
     return new_order
 

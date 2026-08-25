@@ -34,26 +34,46 @@ def login(
     
     client_ip = request.client.host
 
-    rate_limit_key = f"rate_limit:login:{client_ip}"
+    # Normalize the email exactly as we did during registration.
+    email = form_data.username.strip().lower()
 
-    # allowed = check_fixed_window_rate_limit(
-    #     key=rate_limit_key,
+    # Fixed Window
+    # ip_allowed = check_fixed_window_rate_limit(
+    #     key=f"rate_limit:fixed:login:{client_ip}",
     #     limit=5,
     #     window_seconds=60,
     # )
 
-    # allowed = check_sliding_window_rate_limit(
+    # Sliding Window
+    # ip_allowed = check_sliding_window_rate_limit(
     #     key=f"rate_limit:sliding:login:{client_ip}",
     #     limit=5,
     #     window_seconds=60,
     # )
-    allowed = check_token_bucket_rate_limit(
-        key=f"rate_limit:token:login:{client_ip}",
+
+    # Broad source-level protection.
+    # Kept more permissive because many legitimate users
+    # may share the same public IP address.
+    ip_allowed = check_token_bucket_rate_limit(
+        key=f"rate_limit:token:login:ip:{client_ip}",
+        capacity=50,
+        refill_interval_seconds=2,
+    )
+
+    if not ip_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+        )
+
+     # Stricter protection for a specific account.
+    email_allowed = check_token_bucket_rate_limit(
+        key=f"rate_limit:token:login:email:{email}",
         capacity=5,
         refill_interval_seconds=10,
     )
 
-    if not allowed:
+    if not email_allowed:
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts. Try again later.",
@@ -65,9 +85,6 @@ def login(
     OAuth2 calls the first form field `username`.
     BananaKart treats that field as the user's email address.
     """
-
-    # Normalize the email exactly as we did during registration.
-    email = form_data.username.strip().lower()
 
     # Search PostgreSQL for a user with this email.
     user = db.scalar(

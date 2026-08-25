@@ -304,15 +304,15 @@ def test_token_bucket_rate_limit_blocks_when_empty(
     client,
     monkeypatch,
 ):
-    calls = {"count": 0}
+    counts = {}
 
     def fake_token_bucket_rate_limit(
         key: str,
         capacity: int,
         refill_interval_seconds: int,
     ) -> bool:
-        calls["count"] += 1
-        return calls["count"] <= 5
+        counts[key] = counts.get(key, 0) + 1
+        return counts[key] <= 5
 
     monkeypatch.setattr(
         "app.api.routes.auth.check_token_bucket_rate_limit",
@@ -339,3 +339,36 @@ def test_token_bucket_rate_limit_blocks_when_empty(
     )
 
     assert response.status_code == 429
+
+
+def test_email_rate_limit_can_block_login(
+    client,
+    monkeypatch,
+):
+    def fake_token_bucket_rate_limit(
+        key: str,
+        capacity: int,
+        refill_interval_seconds: int,
+    ) -> bool:
+        if ":email:" in key:
+            return False
+
+        return True
+
+    monkeypatch.setattr(
+        "app.api.routes.auth.check_token_bucket_rate_limit",
+        fake_token_bucket_rate_limit,
+    )
+
+    response = client.post(
+        "/auth/login",
+        data={
+            "username": "target@example.com",
+            "password": "wrong-password",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": "Too many login attempts. Try again later."
+    }

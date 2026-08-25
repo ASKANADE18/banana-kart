@@ -208,3 +208,134 @@ def test_users_me_rejects_token_for_nonexistent_user(client):
     assert response.json() == {
         "detail": "Could not validate credentials"
     }
+
+def test_fixed_window_rate_limit_blocks_sixth_request(monkeypatch):
+    from app import rate_limit
+
+    counts = {}
+
+    def fake_incr(key):
+        counts[key] = counts.get(key, 0) + 1
+        return counts[key]
+
+    def fake_expire(key, seconds):
+        return True
+
+    monkeypatch.setattr(
+        rate_limit.redis_client,
+        "incr",
+        fake_incr,
+    )
+
+    monkeypatch.setattr(
+        rate_limit.redis_client,
+        "expire",
+        fake_expire,
+    )
+
+    key = "rate_limit:fixed:test"
+
+    for _ in range(5):
+        allowed = rate_limit.check_fixed_window_rate_limit(
+            key=key,
+            limit=5,
+            window_seconds=60,
+        )
+        assert allowed is True
+
+    allowed = rate_limit.check_fixed_window_rate_limit(
+        key=key,
+        limit=5,
+        window_seconds=60,
+    )
+
+    assert allowed is False
+
+def test_sliding_window_rate_limit_blocks_sixth_request(monkeypatch):
+    from app import rate_limit
+
+    state = []
+
+    def fake_time():
+        return 1000.0
+
+    def fake_zremrangebyscore(key, min_score, max_score):
+        state[:] = [
+            timestamp
+            for timestamp in state
+            if timestamp > max_score
+        ]
+
+    def fake_zcard(key):
+        return len(state)
+
+    def fake_zadd(key, mapping):
+        for score in mapping.values():
+            state.append(score)
+
+    def fake_expire(key, seconds):
+        return True
+
+    monkeypatch.setattr(rate_limit.time, "time", fake_time)
+    monkeypatch.setattr(rate_limit.redis_client, "zremrangebyscore", fake_zremrangebyscore)
+    monkeypatch.setattr(rate_limit.redis_client, "zcard", fake_zcard)
+    monkeypatch.setattr(rate_limit.redis_client, "zadd", fake_zadd)
+    monkeypatch.setattr(rate_limit.redis_client, "expire", fake_expire)
+
+    key = "rate_limit:sliding:test"
+
+    for _ in range(5):
+        allowed = rate_limit.check_sliding_window_rate_limit(
+            key=key,
+            limit=5,
+            window_seconds=60,
+        )
+        assert allowed is True
+
+    allowed = rate_limit.check_sliding_window_rate_limit(
+        key=key,
+        limit=5,
+        window_seconds=60,
+    )
+
+    assert allowed is False
+
+def test_token_bucket_rate_limit_blocks_when_empty(
+    client,
+    monkeypatch,
+):
+    calls = {"count": 0}
+
+    def fake_token_bucket_rate_limit(
+        key: str,
+        capacity: int,
+        refill_interval_seconds: int,
+    ) -> bool:
+        calls["count"] += 1
+        return calls["count"] <= 5
+
+    monkeypatch.setattr(
+        "app.api.routes.auth.check_token_bucket_rate_limit",
+        fake_token_bucket_rate_limit,
+    )
+
+    for _ in range(5):
+        response = client.post(
+            "/auth/login",
+            data={
+                "username": "wrong@example.com",
+                "password": "wrong-password",
+            },
+        )
+
+        assert response.status_code == 401
+
+    response = client.post(
+        "/auth/login",
+        data={
+            "username": "wrong@example.com",
+            "password": "wrong-password",
+        },
+    )
+
+    assert response.status_code == 429

@@ -107,3 +107,16 @@ def db_session(
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limit_keys():
+    from app.cache import redis_client
+
+    for key in redis_client.scan_iter(match="rate_limit:*"):
+        redis_client.delete(key)
+
+    yield
+
+    for key in redis_client.scan_iter(match="rate_limit:*"):
+        redis_client.delete(key)
